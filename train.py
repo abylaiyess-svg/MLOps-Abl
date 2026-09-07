@@ -16,6 +16,7 @@ from sklearn.model_selection import train_test_split
 
 DATA_PATH = Path("data.csv")
 MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000")
+EXPERIMENT_NAME = "sentiment_classification"
 REGISTERED_MODEL_NAME = "production_classifier"
 N_ESTIMATORS = 100
 MAX_DEPTH = 10
@@ -86,7 +87,7 @@ def train() -> None:
         X, y, test_size=0.2, random_state=RANDOM_STATE, stratify=y
     )
 
-    mlflow.set_experiment("mlops-workshop")
+    mlflow.set_experiment(EXPERIMENT_NAME)
     with mlflow.start_run() as run:
         print(
             f"Обучение RandomForestClassifier "

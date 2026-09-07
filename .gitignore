@@ -2,6 +2,9 @@ __pycache__/
 *.pyc
 venv/
 .venv/
-data.csv
 mlflow.db
 .DS_Store
+
+# data.csv намеренно НЕ указан: на шаге 3 практикума его добавляет сюда
+# сам `dvc add data.csv` (строка /data.csv) — в этом смысл демонстрации DVC.
+/data.csv
