@@ -1,5 +1,6 @@
 """Обучение RandomForest и регистрация модели в MLflow."""
 
+import argparse
 import os
 import sys
 import time
@@ -8,6 +9,7 @@ from pathlib import Path
 import boto3
 import mlflow
 import mlflow.sklearn
+from mlflow.models import infer_signature
 import pandas as pd
 from botocore.client import Config
 from sklearn.ensemble import RandomForestClassifier
@@ -18,8 +20,8 @@ DATA_PATH = Path("data.csv")
 MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000")
 EXPERIMENT_NAME = "sentiment_classification"
 REGISTERED_MODEL_NAME = "production_classifier"
-N_ESTIMATORS = 100
-MAX_DEPTH = 10
+DEFAULT_N_ESTIMATORS = 100
+DEFAULT_MAX_DEPTH = 10
 RANDOM_STATE = 42
 
 
@@ -77,7 +79,7 @@ def load_dataset() -> tuple[pd.DataFrame, pd.Series]:
     return df.drop(columns=["target"]), df["target"]
 
 
-def train() -> None:
+def train(n_estimators: int, max_depth: int) -> None:
     configure_environment()
     ensure_minio_bucket()
     wait_for_mlflow()
@@ -91,11 +93,11 @@ def train() -> None:
     with mlflow.start_run() as run:
         print(
             f"Обучение RandomForestClassifier "
-            f"(n_estimators={N_ESTIMATORS}, max_depth={MAX_DEPTH})..."
+            f"(n_estimators={n_estimators}, max_depth={max_depth})..."
         )
         model = RandomForestClassifier(
-            n_estimators=N_ESTIMATORS,
-            max_depth=MAX_DEPTH,
+            n_estimators=n_estimators,
+            max_depth=max_depth,
             random_state=RANDOM_STATE,
         )
         model.fit(X_train, y_train)
@@ -103,13 +105,17 @@ def train() -> None:
         y_pred = model.predict(X_test)
         score = f1_score(y_test, y_pred)
 
-        mlflow.log_param("n_estimators", N_ESTIMATORS)
-        mlflow.log_param("max_depth", MAX_DEPTH)
+        mlflow.log_param("n_estimators", n_estimators)
+        mlflow.log_param("max_depth", max_depth)
         mlflow.log_metric("f1_score", score)
+        # Сигнатура и пример входа: без них REST-эндпоинт не знает схему
+        # запроса, а MLflow пишет предупреждение при логировании.
         mlflow.sklearn.log_model(
             model,
             artifact_path="model",
             registered_model_name=REGISTERED_MODEL_NAME,
+            signature=infer_signature(X_test, y_pred),
+            input_example=X_test.head(3),
         )
 
         print(f"Run ID: {run.info.run_id}")
@@ -117,9 +123,29 @@ def train() -> None:
         print(f"Модель зарегистрирована как '{REGISTERED_MODEL_NAME}'")
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Обучение RandomForest и регистрация модели в MLflow."
+    )
+    parser.add_argument(
+        "--n-estimators",
+        type=int,
+        default=DEFAULT_N_ESTIMATORS,
+        help=f"Число деревьев (по умолчанию {DEFAULT_N_ESTIMATORS})",
+    )
+    parser.add_argument(
+        "--max-depth",
+        type=int,
+        default=DEFAULT_MAX_DEPTH,
+        help=f"Максимальная глубина дерева (по умолчанию {DEFAULT_MAX_DEPTH})",
+    )
+    return parser.parse_args()
+
+
 if __name__ == "__main__":
+    args = parse_args()
     try:
-        train()
+        train(args.n_estimators, args.max_depth)
     except SystemExit:
         raise
     except Exception as exc:

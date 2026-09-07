@@ -42,3 +42,42 @@ dvc push
 ## CI
 
 При push/PR в `main` GitHub Actions поднимает стек, обучает модель и запускает Quality Gate.
+
+## Вторая версия модели и деплой
+
+Гиперпараметры `train.py` задаются флагами, поэтому новая версия обучается той же
+командой с другими параметрами:
+
+```bash
+python train.py                                  # v1: n_estimators=100, max_depth=10  -> f1 0.8426
+python eval_gate.py
+python train.py --n-estimators 300 --max-depth 20  # v2: улучшенная              -> f1 0.8638
+python eval_gate.py
+```
+
+`eval_gate.py` переводит прошедшую версию в `Staging`. Деплой — отдельный шаг:
+
+```bash
+python deploy.py              # самая свежая версия из Staging -> Production
+python deploy.py --version 2  # либо конкретная версия
+```
+
+`deploy.py` использует `archive_existing_versions=True`, поэтому в `Production`
+всегда остаётся ровно одна версия, а предыдущая уходит в `Archived`.
+
+### REST-сервис с production-моделью
+
+```bash
+mlflow models serve -m models:/production_classifier/Production -p 5001 --env-manager local
+```
+
+Проверка:
+
+```bash
+curl -X POST http://localhost:5001/invocations \
+  -H 'Content-Type: application/json' \
+  -d '{"dataframe_split": {"columns": ["feature_0", "..."], "data": [[...]]}}'
+# {"predictions": [1, 1, 1, 1, 0]}
+```
+
+Служебные эндпоинты: `GET /ping`, `GET /health`, `GET /version`.

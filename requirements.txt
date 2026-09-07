@@ -9,3 +9,8 @@ psycopg2-binary>=2.9
 dvc>=3.50
 dvc-s3>=3.2
 pytest>=8.0
+
+# `mlflow models serve`: в 2.22.5 сервер скоринга вешает Flask-стиль
+# @app.route(...) на объект FastAPI. Декоратор .route живёт в Starlette < 0.47,
+# поэтому без этого пина сервинг падает с AttributeError.
+fastapi<0.116
